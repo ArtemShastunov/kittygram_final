@@ -1,3 +1,116 @@
+name: Kittygram CI/CD
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  backend_tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: kittygram_user
+          POSTGRES_PASSWORD: test_pass
+          POSTGRES_DB: kittygram_test
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.12
+    - name: Install deps
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8==7.3.0 flake8-isort==7.0.0
+        pip install -r ./backend/requirements.txt
+    - name: Lint and test
+      env:
+        POSTGRES_USER: kittygram_user
+        POSTGRES_PASSWORD: test_pass
+        POSTGRES_DB: kittygram_test
+        DB_HOST: 127.0.0.1
+        DB_PORT: 5432
+      run: |
+        python -m flake8 backend/
+        cd backend/
+        python manage.py test
+
+  frontend_tests:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Node
+      uses: actions/setup-node@v3
+      with:
+        node-version: 18
+    - name: Install and test
+      run: |
+        cd frontend/
+        npm ci
+        npm run test
+
+  build_backend:
+    runs-on: ubuntu-latest
+    needs: backend_tests
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    - name: Login to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+    - name: Build and push
+      uses: docker/build-push-action@v4
+      with:
+        context: ./backend/
+        push: true
+        tags: artemdecide/kittygram_backend:latest
+
+  build_frontend:
+    runs-on: ubuntu-latest
+    needs: frontend_tests
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    - name: Login to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+    - name: Build and push
+      uses: docker/build-push-action@v4
+      with:
+        context: ./frontend/
+        push: true
+        tags: artemdecide/kittygram_frontend:latest
+
+  build_gateway:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    - name: Login to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+    - name: Build and push
+      uses: docker/build-push-action@v4
+      with:
+        context: ./nginx/
+        push: true
+        tags: artemdecide/kittygram_gateway:latest
+
   deploy:
     runs-on: ubuntu-latest
     needs: [build_backend, build_frontend, build_gateway]
@@ -11,31 +124,40 @@
         key: ${{ secrets.SSH_KEY }}
         source: "docker-compose.production.yml"
         target: "kittygram"
-    - name: Copy env file
-      uses: appleboy/scp-action@master
-      with:
-        host: ${{ secrets.HOST }}
-        username: ${{ secrets.USER }}
-        key: ${{ secrets.SSH_KEY }}
-        source: ".env"
-        target: "kittygram"
-        - name: Deploy
+    - name: Deploy
       uses: appleboy/ssh-action@master
       with:
         host: ${{ secrets.HOST }}
         username: ${{ secrets.USER }}
         key: ${{ secrets.SSH_KEY }}
         script: |
-          cd kittygram
+          cd /home/ubuntu/kittygram
           
-          echo "POSTGRES_USER=kittygram_user" > .env
-          echo "POSTGRES_PASSWORD=kittygram_password" >> .env
-          echo "POSTGRES_DB=kittygram" >> .env
-          echo "DB_HOST=db" >> .env
-          echo "DB_PORT=5432" >> .env
+          # Создаём .env файл с абсолютным путём
+          echo "POSTGRES_USER=kittygram_user" > /home/ubuntu/kittygram/.env
+          echo "POSTGRES_PASSWORD=kittygram_password" >> /home/ubuntu/kittygram/.env
+          echo "POSTGRES_DB=kittygram" >> /home/ubuntu/kittygram/.env
+          echo "DB_HOST=db" >> /home/ubuntu/kittygram/.env
+          echo "DB_PORT=5432" >> /home/ubuntu/kittygram/.env
+          
+          # Проверка, что файл создался
+          ls -la /home/ubuntu/kittygram/.env
+          
+          # Основные команды деплоя
           sudo docker compose -f docker-compose.production.yml pull
           sudo docker compose -f docker-compose.production.yml down
           sudo docker compose -f docker-compose.production.yml up -d
           sudo docker compose -f docker-compose.production.yml exec backend python manage.py migrate
           sudo docker compose -f docker-compose.production.yml exec backend python manage.py collectstatic --noinput
           sudo docker compose -f docker-compose.production.yml exec backend cp -r /app/collected_static/. /static_backend/static/
+
+  notify:
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+    - name: Telegram message
+      uses: appleboy/telegram-action@master
+      with:
+        to: ${{ secrets.TELEGRAM_TO }}
+        token: ${{ secrets.TELEGRAM_TOKEN }}
+        message: Kittygram деплойнулся
