@@ -133,19 +133,16 @@ jobs:
         script: |
           cd /home/ubuntu/kittygram
           
-          # Создаём .env файл с абсолютным путём
           echo "POSTGRES_USER=kittygram_user" > /home/ubuntu/kittygram/.env
           echo "POSTGRES_PASSWORD=kittygram_password" >> /home/ubuntu/kittygram/.env
           echo "POSTGRES_DB=kittygram" >> /home/ubuntu/kittygram/.env
           echo "DB_HOST=db" >> /home/ubuntu/kittygram/.env
           echo "DB_PORT=5432" >> /home/ubuntu/kittygram/.env
           
-          # Проверка, что файл создался
-          ls -la /home/ubuntu/kittygram/.env
+          sudo docker rm -f kittygram-gateway-1 kittygram-backend-1 kittygram-frontend-1 kittygram-db-1 2>/dev/null || true
           
-          # Основные команды деплоя
           sudo docker compose -f docker-compose.production.yml pull
-          sudo docker compose -f docker-compose.production.yml down
+          sudo docker compose -f docker-compose.production.yml down --remove-orphans
           sudo docker compose -f docker-compose.production.yml up -d
           sudo docker compose -f docker-compose.production.yml exec backend python manage.py migrate
           sudo docker compose -f docker-compose.production.yml exec backend python manage.py collectstatic --noinput
