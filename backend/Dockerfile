@@ -11,4 +11,4 @@ COPY . .
 
 ENV PATH="/usr/local/bin:$PATH"
 
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "kittygram_backend.wsgi"]
+CMD ["python", "-m", "gunicorn", "--bind", "0.0.0.0:8000", "kittygram_backend.wsgi"]
