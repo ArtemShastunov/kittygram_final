@@ -13,7 +13,7 @@ services:
       - pg_data:/var/lib/postgresql/data
 
   backend:
-    image: artemdecide/kittygram_backend:v2
+    image: artemdecide/kittygram_backend:v3
     env_file: .env
     volumes:
       - static_volume:/static_backend
