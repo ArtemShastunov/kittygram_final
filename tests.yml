@@ -1,5 +1,5 @@
 repo_owner: ArtemShastunov
-kittygram_domain: http://158.160.138.144
-taski_domain: http://158.160.138.144
+kittygram_domain: https://158.160.138.144
+taski_domain: https://158.160.138.144
 dockerhub_username: artemdecide
 vm_name: r-backend-vm-1789078722
