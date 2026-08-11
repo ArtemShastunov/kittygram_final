@@ -73,7 +73,7 @@ jobs:
         context: ./backend/
         push: true
         tags: artemdecide/kittygram_backend:latest
-	no-cache: true
+        no-cache: true
 
   build_frontend:
     runs-on: ubuntu-latest
