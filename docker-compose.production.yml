@@ -1,5 +1,3 @@
-version: '3'
-
 volumes:
   pg_data:
   static_volume:
@@ -15,6 +13,8 @@ services:
   backend:
     image: artemdecide/kittygram_backend:v4
     env_file: .env
+    depends_on:
+      - db
     volumes:
       - static_volume:/static_backend
       - media_volume:/media
@@ -29,6 +29,9 @@ services:
   gateway:
     image: artemdecide/kittygram_gateway:latest
     env_file: .env
+    depends_on:
+      - backend
+      - frontend
     volumes:
       - static_volume:/static
       - media_volume:/media

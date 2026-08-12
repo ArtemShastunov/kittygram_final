@@ -2,8 +2,6 @@ name: Kittygram CI/CD
 
 on:
   push:
-    branches:
-      - main
 
 jobs:
   backend_tests:
@@ -19,9 +17,9 @@ jobs:
           - 5432:5432
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: 3.12
     - name: Install deps
@@ -44,9 +42,9 @@ jobs:
   frontend_tests:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Node
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: 18
     - name: Install and test
@@ -58,6 +56,7 @@ jobs:
   build_backend:
     runs-on: ubuntu-latest
     needs: backend_tests
+    if: github.ref == 'refs/heads/main'
     steps:
     - uses: actions/checkout@v4
     - name: Set up Docker Buildx
@@ -72,51 +71,54 @@ jobs:
       with:
         context: ./backend/
         push: true
-        tags: artemdecide/kittygram_backend:latest
+        tags: ${{ secrets.DOCKER_USERNAME }}/kittygram_backend:latest
         no-cache: true
 
   build_frontend:
     runs-on: ubuntu-latest
     needs: frontend_tests
+    if: github.ref == 'refs/heads/main'
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
+      uses: docker/setup-buildx-action@v3
     - name: Login to Docker Hub
-      uses: docker/login-action@v2
+      uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
     - name: Build and push
-      uses: docker/build-push-action@v4
+      uses: docker/build-push-action@v6
       with:
         context: ./frontend/
         push: true
-        tags: artemdecide/kittygram_frontend:latest
+        tags: ${{ secrets.DOCKER_USERNAME }}/kittygram_frontend:latest
 
   build_gateway:
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
+      uses: docker/setup-buildx-action@v3
     - name: Login to Docker Hub
-      uses: docker/login-action@v2
+      uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
     - name: Build and push
-      uses: docker/build-push-action@v4
+      uses: docker/build-push-action@v6
       with:
         context: ./nginx/
         push: true
-        tags: artemdecide/kittygram_gateway:latest
+        tags: ${{ secrets.DOCKER_USERNAME }}/kittygram_gateway:latest
 
   deploy:
     runs-on: ubuntu-latest
     needs: [build_backend, build_frontend, build_gateway]
+    if: github.ref == 'refs/heads/main'
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Copy compose file
       uses: appleboy/scp-action@master
       with:
@@ -133,15 +135,9 @@ jobs:
         key: ${{ secrets.SSH_KEY }}
         script: |
           cd /home/ubuntu/kittygram
-          
-          echo "POSTGRES_USER=kittygram_user" > /home/ubuntu/kittygram/.env
-          echo "POSTGRES_PASSWORD=kittygram_password" >> /home/ubuntu/kittygram/.env
-          echo "POSTGRES_DB=kittygram" >> /home/ubuntu/kittygram/.env
-          echo "DB_HOST=db" >> /home/ubuntu/kittygram/.env
-          echo "DB_PORT=5432" >> /home/ubuntu/kittygram/.env
-          
-          sudo docker rm -f kittygram-gateway-1 kittygram-backend-1 kittygram-frontend-1 kittygram-db-1 2>/dev/null || true
-          
+          echo "SECRET_KEY=$(python3 -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())')" >> .env
+          echo "DEBUG=false" >> .env
+          echo "ALLOWED_HOSTS=*" >> .env
           sudo docker compose -f docker-compose.production.yml pull
           sudo docker compose -f docker-compose.production.yml down --remove-orphans || true
           sudo docker compose -f docker-compose.production.yml up -d
@@ -152,10 +148,15 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     needs: deploy
+    if: github.ref == 'refs/heads/main'
     steps:
     - name: Telegram message
       uses: appleboy/telegram-action@master
       with:
         to: ${{ secrets.TELEGRAM_TO }}
         token: ${{ secrets.TELEGRAM_TOKEN }}
-        message: Kittygram деплойнулся
+        message: |
+          Деплой Kittygram успешен!
+          Автор: ${{ github.actor }}
+          Коммит: ${{ github.event.head_commit.message }}
+          Ссылка: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
