@@ -21,7 +21,6 @@
 ```bash
 git clone https://github.com/ArtemShastunov/kittygram_final.git
 cd kittygram_final
-Создайте файл .env в корне проекта:
 
 text
 POSTGRES_USER=kittygram_user
@@ -29,6 +28,9 @@ POSTGRES_PASSWORD=kittygram_password
 POSTGRES_DB=kittygram
 DB_HOST=db
 DB_PORT=5432
+SECRET_KEY=your_secret_key
+DEBUG=false
+ALLOWED_HOSTS=*
 Запустите контейнеры:
 
 bash

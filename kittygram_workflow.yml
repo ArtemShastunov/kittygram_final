@@ -148,7 +148,6 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     needs: deploy
-    if: github.ref == 'refs/heads/main'
     steps:
     - name: Telegram message
       uses: appleboy/telegram-action@master
